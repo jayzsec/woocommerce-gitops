@@ -1,7 +1,7 @@
 ---
 - name: Install and configure WooCommerce
   hosts: ec2
-  become: yes
+  become: true
   vars:
     db_name: "{{ lookup('env', 'DB_NAME') }}"
     db_user: "{{ lookup('env', 'DB_USER') }}"

@@ -123,21 +123,31 @@ jobs:
       run: |
         terraform apply -auto-approve -input=false -var="db_name=${{ secrets.DB_NAME }}" -var="db_username=${{ secrets.DB_USER }}" -var="db_password=${{ secrets.DB_PASSWORD }}"
 
-    - name: Get Terraform Outputs
+    - name: Get EC2 IP and RDS Endpoint
       id: get_outputs
-      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
       run: |
-        # Ensure we're just getting the raw value without any extra content
-        EC2_IP=$(terraform output -raw ec2_public_ip | tr -d '\n')
-        RDS_ENDPOINT=$(terraform output -raw rds_endpoint | tr -d '\n')
+        # Use absolute path to terraform and strip newlines
+        EC2_IP=$(/usr/local/bin/terraform output -raw ec2_public_ip | tr -d '\n')
+        RDS_ENDPOINT=$(/usr/local/bin/terraform output -raw rds_endpoint | tr -d '\n')
         
-        # Use proper GitHub Actions output syntax
+        # Check if we got valid values
+        if [[ -z "$EC2_IP" ]]; then
+          echo "Failed to extract EC2 IP address"
+          exit 1
+        fi
+        
+        if [[ -z "$RDS_ENDPOINT" ]]; then
+          echo "Failed to extract RDS endpoint"
+          exit 1
+        fi
+        
+        # Set GitHub Actions outputs
         echo "ec2_public_ip=${EC2_IP}" >> $GITHUB_OUTPUT
         echo "rds_endpoint=${RDS_ENDPOINT}" >> $GITHUB_OUTPUT
         
-        # Verify what we're outputting (for debugging)
-        echo "DEBUG - EC2 IP: ${EC2_IP}"
-        echo "DEBUG - RDS Endpoint: ${RDS_ENDPOINT}"
+        # Print for verification
+        echo "EC2 Public IP: ${EC2_IP}"
+        echo "RDS Endpoint: ${RDS_ENDPOINT}"
 
   ansible:
     needs: terraform
