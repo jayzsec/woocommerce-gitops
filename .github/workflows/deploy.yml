@@ -59,9 +59,9 @@ jobs:
       uses: actions/checkout@v3
 
     - name: Setup Terraform
-      uses: hashicorp/setup-terraform@v2
+      uses: hashicorp/setup-terraform@v3
       with:
-        terraform_version: 1.1.7
+        terraform_version: 1.11.4
         terraform_wrapper: false
 
     - name: Configure AWS Credentials
@@ -218,5 +218,15 @@ jobs:
             -e "db_password=${{ secrets.DB_PASSWORD }}" \
             -e "db_host=${{ steps.rds_host.outputs.RDS_HOST }}" \
             --private-key=${WORKSPACE}/woocommerce-key.pem
+          
+          # Check if wordpress-fix.yml exists in woocommerce-deploy directory first
+          if [ -s ansible/woocommerce-deploy/wordpress-fix.yml ]; then
+            echo "Using wordpress-fix.yml from woocommerce-deploy directory"
+            ansible-playbook -i ansible/woocommerce-deploy/inventory.ini ansible/woocommerce-deploy/wordpress-fix.yml \
+              --private-key=${WORKSPACE}/woocommerce-key.pem
+          else
+            echo "No valid playbook found! Exiting."
+            exit 1
+          fi
           
           echo "WooCommerce deployment completed. Site available at: http://${{ needs.terraform.outputs.ec2_public_ip }}/wordpress"
