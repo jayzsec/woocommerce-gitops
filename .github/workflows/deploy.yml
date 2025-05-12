@@ -13,7 +13,9 @@ jobs:
     name: 'Terraform'
     runs-on: ubuntu-latest
     environment: production
-
+    outputs:
+      ec2_public_ip: ${{ steps.get_outputs.outputs.ec2_public_ip }}
+      
     defaults:
       run:
         shell: bash
@@ -87,6 +89,12 @@ jobs:
       if: github.ref == 'refs/heads/main' && github.event_name == 'push'
       run: terraform apply -auto-approve -input=false
 
+    - name: Get Terraform Outputs
+      id: get_outputs
+      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      run: |
+        echo "ec2_public_ip=$(terraform output -raw ec2_public_ip)" >> $GITHUB_OUTPUT
+
   ansible:
     needs: terraform
     runs-on: ubuntu-latest
@@ -119,14 +127,16 @@ jobs:
           # Make sure the directories exist
           mkdir -p ansible/woocommerce-deploy
           
-          # Create inventory.ini if it doesn't exist
-          if [ ! -f ansible/woocommerce-deploy/inventory.ini ]; then
-            echo "[ec2]" > ansible/woocommerce-deploy/inventory.ini
-            echo "$(terraform -chdir=terraform output -raw ec2_public_ip) ansible_user=ec2-user ansible_ssh_private_key_file=../woocommerce-key.pem ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'" >> ansible/woocommerce-deploy/inventory.ini
-          fi
+          # Create inventory.ini with the EC2 public IP from Terraform output
+          echo "[ec2]" > ansible/woocommerce-deploy/inventory.ini
+          echo "${{ needs.terraform.outputs.ec2_public_ip }} ansible_user=ec2-user ansible_ssh_private_key_file=../woocommerce-key.pem ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'" >> ansible/woocommerce-deploy/inventory.ini
           
           # Run the playbook from woocommerce-deploy directory
           cd ansible/woocommerce-deploy
+          
+          # Add a delay to ensure EC2 is fully initialized
+          echo "Waiting for EC2 instance to initialize fully..."
+          sleep 30
           
           ansible-playbook -i inventory.ini woocommerce-playbook.yml \
             -e "db_name=${{ secrets.DB_NAME }}" \
