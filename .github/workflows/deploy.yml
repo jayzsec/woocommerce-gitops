@@ -1,4 +1,3 @@
-# .github/workflows/deploy.yml
 name: Deploy WooCommerce
 
 on:
@@ -9,12 +8,46 @@ on:
       - 'ansible/**'
 
 jobs:
+  backend_init:
+    name: 'Initialize Terraform Backend'
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v2
+      with:
+        terraform_version: 1.1.7
+
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ap-southeast-2
+
+    - name: Check and create backend infrastructure if needed
+      run: |
+        # Check if the S3 bucket exists
+        if ! aws s3api head-bucket --bucket woocommerce-gitops-terraform-state 2>/dev/null; then
+          echo "Creating Terraform backend infrastructure..."
+          cd backend-setup
+          terraform init
+          terraform apply -auto-approve
+          cd ..
+        else
+          echo "Backend infrastructure already exists."
+        fi
+
   terraform:
     name: 'Terraform'
+    needs: backend_init
     runs-on: ubuntu-latest
     environment: production
     outputs:
       ec2_public_ip: ${{ steps.get_outputs.outputs.ec2_public_ip }}
+      rds_endpoint: ${{ steps.get_outputs.outputs.rds_endpoint }}
       
     defaults:
       run:
@@ -87,13 +120,15 @@ jobs:
 
     - name: Terraform Apply
       if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-      run: terraform apply -auto-approve -input=false
+      run: |
+        terraform apply -auto-approve -input=false -var="db_name=${{ secrets.DB_NAME }}" -var="db_username=${{ secrets.DB_USER }}" -var="db_password=${{ secrets.DB_PASSWORD }}"
 
     - name: Get Terraform Outputs
       id: get_outputs
       if: github.ref == 'refs/heads/main' && github.event_name == 'push'
       run: |
         echo "ec2_public_ip=$(terraform output -raw ec2_public_ip)" >> $GITHUB_OUTPUT
+        echo "rds_endpoint=$(terraform output -raw rds_endpoint)" >> $GITHUB_OUTPUT
 
   ansible:
     needs: terraform
@@ -119,28 +154,49 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ap-southeast-2
 
+      - name: Extract RDS host from endpoint
+        id: rds_host
+        run: |
+          RDS_ENDPOINT="${{ needs.terraform.outputs.rds_endpoint }}"
+          RDS_HOST="${RDS_ENDPOINT%%:*}"
+          echo "RDS_HOST=${RDS_HOST}" >> $GITHUB_OUTPUT
+
       - name: Run Ansible playbook
         run: |
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > woocommerce-key.pem
-          chmod 600 woocommerce-key.pem
+          WORKSPACE="${GITHUB_WORKSPACE}"
+          
+          # Create SSH key with full path
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ${WORKSPACE}/woocommerce-key.pem
+          chmod 600 ${WORKSPACE}/woocommerce-key.pem
           
           # Make sure the directories exist
           mkdir -p ansible/woocommerce-deploy
           
           # Create inventory.ini with the EC2 public IP from Terraform output
           echo "[ec2]" > ansible/woocommerce-deploy/inventory.ini
-          echo "${{ needs.terraform.outputs.ec2_public_ip }} ansible_user=ec2-user ansible_ssh_private_key_file=../woocommerce-key.pem ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'" >> ansible/woocommerce-deploy/inventory.ini
-          
-          # Run the playbook from woocommerce-deploy directory
-          cd ansible/woocommerce-deploy
+          echo "${{ needs.terraform.outputs.ec2_public_ip }} ansible_user=ec2-user ansible_ssh_private_key_file=${WORKSPACE}/woocommerce-key.pem ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'" >> ansible/woocommerce-deploy/inventory.ini
           
           # Add a delay to ensure EC2 is fully initialized
           echo "Waiting for EC2 instance to initialize fully..."
           sleep 30
           
-          ansible-playbook -i inventory.ini woocommerce-playbook.yml \
+          # Decide which playbook to use - use either the dedicated playbook or the one in playbooks directory
+          if [ -s ansible/woocommerce-deploy/woocommerce-playbook.yml ]; then
+            PLAYBOOK="ansible/woocommerce-deploy/woocommerce-playbook.yml"
+          elif [ -s ansible/playbooks/deploy.yml ]; then
+            PLAYBOOK="ansible/playbooks/deploy.yml"
+            # Ensure the inventory is properly set
+            cp ansible/woocommerce-deploy/inventory.ini ansible/inventory/
+          else
+            echo "No valid playbook found! Exiting."
+            exit 1
+          fi
+          
+          ansible-playbook -i ansible/woocommerce-deploy/inventory.ini ${PLAYBOOK} \
             -e "db_name=${{ secrets.DB_NAME }}" \
             -e "db_user=${{ secrets.DB_USER }}" \
             -e "db_password=${{ secrets.DB_PASSWORD }}" \
-            -e "db_host=${{ secrets.DB_HOST }}" \
-            --private-key=../../woocommerce-key.pem
+            -e "db_host=${{ steps.rds_host.outputs.RDS_HOST }}" \
+            --private-key=${WORKSPACE}/woocommerce-key.pem
+          
+          echo "WooCommerce deployment completed. Site available at: http://${{ needs.terraform.outputs.ec2_public_ip }}/wordpress"
