@@ -16,9 +16,9 @@ jobs:
       uses: actions/checkout@v3
 
     - name: Setup Terraform
-      uses: hashicorp/setup-terraform@v2
+      uses: hashicorp/setup-terraform@v3
       with:
-        terraform_version: 1.1.7
+        terraform_version: 1.11.4
 
     - name: Configure AWS Credentials
       uses: aws-actions/configure-aws-credentials@v1
@@ -126,9 +126,9 @@ jobs:
     - name: Get EC2 IP and RDS Endpoint
       id: get_outputs
       run: |
-        # Use absolute path to terraform and strip newlines
-        EC2_IP=$(/usr/local/bin/terraform output -raw ec2_public_ip | tr -d '\n')
-        RDS_ENDPOINT=$(/usr/local/bin/terraform output -raw rds_endpoint | tr -d '\n')
+        # Strip new lines
+        EC2_IP=$(terraform output -raw ec2_public_ip)
+        RDS_ENDPOINT=$(terraform output -raw rds_endpoint)
         
         # Check if we got valid values
         if [[ -z "$EC2_IP" ]]; then
