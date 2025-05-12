@@ -174,9 +174,11 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ap-southeast-2
 
-      - name: Extract RDS host from endpoint
+      - name: Log RDS and ec2 host from endpoint
         id: rds_host
         run: |
+          echo "${{ needs.terraform.outputs.rds_endpoint }}"
+          echo "${{ needs.terraform.outputs.ec2_public_ip }}"
           RDS_HOST=$(echo "${{ needs.terraform.outputs.rds_endpoint }}" | cut -d':' -f1)
           echo "RDS_HOST=${RDS_HOST}" >> $GITHUB_ENV
 
@@ -220,13 +222,13 @@ jobs:
           export DB_NAME="${DB_NAME}"
           export DB_USER="${DB_USER}"
           export DB_PASSWORD="${DB_PASSWORD}"
-          export DB_HOST="${DB_HOST}"
+          # export DB_HOST="${DB_HOST}"
           
           ansible-playbook -i ansible/woocommerce-deploy/inventory.ini ${PLAYBOOK} \
             -e "db_name=${{ secrets.DB_NAME }}" \
             -e "db_user=${{ secrets.DB_USER }}" \
             -e "db_password=${{ secrets.DB_PASSWORD }}" \
-            -e "db_host=${DB_HOST}" \
+            -e "db_host=${{ needs.terraform.outputs.rds_endpoint }}" \
             --private-key=${WORKSPACE}/woocommerce-key.pem
           
           # Run the wp-config verification playbook
