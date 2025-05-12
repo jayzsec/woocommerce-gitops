@@ -204,6 +204,10 @@ jobs:
     - name: Run wp-config verification playbook
       run: |
         ansible-playbook -i ansible/woocommerce-deploy/inventory.ini ansible/woocommerce-deploy/verify-wp-config.yml \
+          -e "db_name=${{ secrets.DB_NAME }}" \
+          -e "db_user=${{ secrets.DB_USER }}" \
+          -e "db_password=${{ secrets.DB_PASSWORD }}" \
+          -e "db_host=${{ env.RDS_ENDPOINT }}" \  
           --private-key=${GITHUB_WORKSPACE}/woocommerce-key.pem
 
     - name: Run WordPress fix playbook
