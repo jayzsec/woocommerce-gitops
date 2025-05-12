@@ -182,6 +182,11 @@ jobs:
           echo "RDS_HOST=${RDS_HOST}" >> $GITHUB_OUTPUT
 
       - name: Run Ansible playbook
+        env:
+          DB_NAME: ${{ secrets.DB_NAME }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_HOST: ${{ steps.rds_host.outputs.RDS_HOST }}
         run: |
           WORKSPACE="${GITHUB_WORKSPACE}"
           
