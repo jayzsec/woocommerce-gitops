@@ -200,7 +200,17 @@ jobs:
           -e "db_password=${{ secrets.DB_PASSWORD }}" \
           -e "db_host=${{ env.RDS_ENDPOINT }}" \
           --private-key=${GITHUB_WORKSPACE}/woocommerce-key.pem
-        
+
+    - name: Apply Wordpress fixes
+      run: |
+        # Run the wordpress-fix.yml playbook
+        ansible-playbook -i ansible/woocommerce-deploy/inventory.ini ansible/woocommerce-deploy/wordpress-fix.yml \
+          -e "db_name=${{ secrets.DB_NAME }}" \
+          -e "db_user=${{ secrets.DB_USER }}" \
+          -e "db_password=${{ secrets.DB_PASSWORD }}" \
+          -e "db_host=${{ env.RDS_ENDPOINT }}" \
+          --private-key=${GITHUB_WORKSPACE}/woocommerce-key.pem  
+
     - name: Check if WordPress is accessible
       run: |
         # Check if WordPress is accessible
