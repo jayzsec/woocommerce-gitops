@@ -1,0 +1,8 @@
+# ansible/woocommerce-deploy/inventory.ini.template
+# DO NOT COMMIT REAL IP ADDRESSES OR CREDENTIALS TO PUBLIC REPOSITORIES
+# Copy this file to inventory.ini and update with your actual values
+
+[ec2]
+# Format: <EC2_IP_ADDRESS> ansible_user=ec2-user ansible_ssh_private_key_file=<PATH_TO_KEY_FILE> ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+# Example: 
+# 11.22.33.44 ansible_user=ec2-user ansible_ssh_private_key_file=~/.ssh/woocommerce-key.pem ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
