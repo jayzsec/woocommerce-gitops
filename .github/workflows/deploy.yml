@@ -127,8 +127,17 @@ jobs:
       id: get_outputs
       if: github.ref == 'refs/heads/main' && github.event_name == 'push'
       run: |
-        echo "ec2_public_ip=$(terraform output -raw ec2_public_ip)" >> $GITHUB_OUTPUT
-        echo "rds_endpoint=$(terraform output -raw rds_endpoint)" >> $GITHUB_OUTPUT
+        # Ensure we're just getting the raw value without any extra content
+        EC2_IP=$(terraform output -raw ec2_public_ip | tr -d '\n')
+        RDS_ENDPOINT=$(terraform output -raw rds_endpoint | tr -d '\n')
+        
+        # Use proper GitHub Actions output syntax
+        echo "ec2_public_ip=${EC2_IP}" >> $GITHUB_OUTPUT
+        echo "rds_endpoint=${RDS_ENDPOINT}" >> $GITHUB_OUTPUT
+        
+        # Verify what we're outputting (for debugging)
+        echo "DEBUG - EC2 IP: ${EC2_IP}"
+        echo "DEBUG - RDS Endpoint: ${RDS_ENDPOINT}"
 
   ansible:
     needs: terraform

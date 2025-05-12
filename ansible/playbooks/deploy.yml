@@ -2,7 +2,7 @@
 ---
 - name: Install and configure WooCommerce
   hosts: ec2
-  become: yes
+  become: true
   vars:
     db_name: "{{ lookup('env', 'DB_NAME') }}"
     db_user: "{{ lookup('env', 'DB_USER') }}"
@@ -91,7 +91,7 @@
       shell: |
         semanage fcontext -a -t httpd_sys_rw_content_t "/var/www/html/wordpress(/.*)?"
         restorecon -Rv /var/www/html/wordpress
-      ignore_errors: yes
+      ignore_errors: true
       
   handlers:
     - name: Restart Apache

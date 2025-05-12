@@ -50,3 +50,5 @@ ansible/woocommerce-deploy/inventory.ini
 
 # MacOS
 .DS_Store
+
+**test.yml
