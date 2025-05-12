@@ -177,16 +177,16 @@ jobs:
       - name: Extract RDS host from endpoint
         id: rds_host
         run: |
-          RDS_ENDPOINT="${{ needs.terraform.outputs.rds_endpoint }}"
-          RDS_HOST="${RDS_ENDPOINT%%:*}"
-          echo "RDS_HOST=${RDS_HOST}" >> $GITHUB_OUTPUT
+          echo "${{ needs.terraform.outputs.rds_endpoint }}"
+          echo "${RDS_ENDPOINT}"
+          
 
       - name: Run Ansible playbook
         env:
           DB_NAME: ${{ secrets.DB_NAME }}
           DB_USER: ${{ secrets.DB_USER }}
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
-          DB_HOST: ${{ steps.rds_host.outputs.RDS_HOST }}
+          DB_HOST: ${{ needs.terraform.outputs.rds_endpoint }}
         run: |
           WORKSPACE="${GITHUB_WORKSPACE}"
           
