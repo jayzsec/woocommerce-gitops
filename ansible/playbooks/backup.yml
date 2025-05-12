@@ -1,0 +1,36 @@
+# playbooks/backup.yml
+---
+- name: Backup WordPress and Database
+  hosts: aws_ec2
+  become: true
+  vars:
+    backup_date: "{{ lookup('pipe', 'date +%Y%m%d-%H%M%S') }}"
+    backup_dir: "/var/backup"
+  tasks:
+    - name: Create backup directory
+      file:
+        path: "{{ backup_dir }}"
+        state: directory
+        mode: '0750'
+
+    - name: Backup WordPress files
+      archive:
+        path: /var/www/html/wordpress
+        dest: "{{ backup_dir }}/wordpress-{{ backup_date }}.tar.gz"
+        format: gz
+
+    - name: Backup MySQL database
+      mysql_db:
+        state: dump
+        name: "{{ db_name }}"
+        target: "{{ backup_dir }}/mysql-{{ db_name }}-{{ backup_date }}.sql"
+        login_host: "{{ db_host }}"
+        login_user: "{{ db_user }}"
+        login_password: "{{ db_password }}"
+
+    - name: Configure S3 backup (optional)
+      aws_s3:
+        bucket: your-backup-bucket
+        object: "backups/{{ backup_date }}/wordpress.tar.gz"
+        src: "{{ backup_dir }}/wordpress-{{ backup_date }}.tar.gz"
+        mode: put
