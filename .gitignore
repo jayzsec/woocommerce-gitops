@@ -1,6 +1,7 @@
 # Local .terraform directories
 terraform/.terraform/
 .terraform/
+terraform/.terraform.lock.hcl
 
 # .tfstate files
 .terraform/*.tfstate
@@ -44,6 +45,8 @@ todo.md
 
 # Ignore environment files
 ansible/woocommerce-deploy/.env
+**/vault.yml
+ansible/woocommerce-deploy/inventory.ini
 
 # MacOS
 .DS_Store
