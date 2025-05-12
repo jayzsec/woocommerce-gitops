@@ -200,24 +200,14 @@ jobs:
           -e "db_password=${{ secrets.DB_PASSWORD }}" \
           -e "db_host=${{ env.RDS_ENDPOINT }}" \
           --private-key=${GITHUB_WORKSPACE}/woocommerce-key.pem
-
-    - name: Run wp-config verification playbook
+        
+    - name: Check if WordPress is accessible
       run: |
-        ansible-playbook -i ansible/woocommerce-deploy/inventory.ini ansible/woocommerce-deploy/verify-wp-config.yml \
-          -e "db_name=${{ secrets.DB_NAME }}" \
-          -e "db_user=${{ secrets.DB_USER }}" \
-          -e "db_password=${{ secrets.DB_PASSWORD }}" \
-          -e "db_host=${{ env.RDS_ENDPOINT }}" \  
-          --private-key=${GITHUB_WORKSPACE}/woocommerce-key.pem
-
-    - name: Run WordPress fix playbook
-      run: |
-        if [ -s ansible/woocommerce-deploy/wordpress-fix.yml ]; then
-          echo "Using wordpress-fix.yml from woocommerce-deploy directory"
-          ansible-playbook -i ansible/woocommerce-deploy/inventory.ini ansible/woocommerce-deploy/wordpress-fix.yml \
-            --private-key=${GITHUB_WORKSPACE}/woocommerce-key.pem
+        # Check if WordPress is accessible
+        if curl -s --head "http://${{ env.EC2_PUBLIC_IP }}/wordpress" | grep "200 OK" > /dev/null; then
+          echo "WordPress is accessible!"
         else
-          echo "wordpress-fix.yml not found!"
+          echo "WordPress is not accessible!"
           exit 1
         fi
 
