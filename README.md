@@ -17,7 +17,7 @@ The architecture includes:
 
 ## Project Structure
 
-![Project Structure](project_structure.png)
+<!-- ![Project Structure](project_structure.png) -->
 
 The project is organized as follows:
 
