@@ -3,7 +3,7 @@ resource "aws_vpc" "main" {
   cidr_block           = "10.0.0.0/16"
   enable_dns_support   = true
   enable_dns_hostnames = true
-  
+
   tags = { Name = "woocommerce-vpc" }
 }
 
@@ -11,7 +11,7 @@ resource "aws_subnet" "public_a" {
   vpc_id            = aws_vpc.main.id
   cidr_block        = "10.0.1.0/24"
   availability_zone = "${var.aws_region}a"
-  
+
   tags = { Name = "woocommerce-subnet-public-a" }
 }
 
@@ -19,24 +19,24 @@ resource "aws_subnet" "public_b" {
   vpc_id            = aws_vpc.main.id
   cidr_block        = "10.0.2.0/24"
   availability_zone = "${var.aws_region}b"
-  
+
   tags = { Name = "woocommerce-subnet-public-b" }
 }
 
 resource "aws_internet_gateway" "igw" {
   vpc_id = aws_vpc.main.id
-  
+
   tags = { Name = "woocommerce-igw" }
 }
 
 resource "aws_route_table" "public" {
   vpc_id = aws_vpc.main.id
-  
+
   route {
     cidr_block = "0.0.0.0/0"
     gateway_id = aws_internet_gateway.igw.id
   }
-  
+
   tags = { Name = "woocommerce-rt-public" }
 }
 
@@ -55,7 +55,7 @@ resource "aws_security_group" "ec2_sg" {
   name        = "woocommerce-ec2-sg"
   description = "Security group for WooCommerce EC2 instance"
   vpc_id      = aws_vpc.main.id
-  
+
   ingress {
     from_port   = 80
     to_port     = 80
@@ -63,7 +63,7 @@ resource "aws_security_group" "ec2_sg" {
     cidr_blocks = ["0.0.0.0/0"]
     description = "Allow HTTP"
   }
-  
+
   ingress {
     from_port   = 22
     to_port     = 22
@@ -71,7 +71,7 @@ resource "aws_security_group" "ec2_sg" {
     cidr_blocks = ["0.0.0.0/0"] # Restrict to your IP in production
     description = "Allow SSH"
   }
-  
+
   egress {
     from_port   = 0
     to_port     = 0
@@ -79,7 +79,7 @@ resource "aws_security_group" "ec2_sg" {
     cidr_blocks = ["0.0.0.0/0"]
     description = "Allow all outbound traffic"
   }
-  
+
   tags = { Name = "woocommerce-ec2-sg" }
 }
 
@@ -87,7 +87,7 @@ resource "aws_security_group" "rds_sg" {
   name        = "woocommerce-rds-sg"
   description = "Security group for WooCommerce RDS instance"
   vpc_id      = aws_vpc.main.id
-  
+
   ingress {
     from_port       = 3306
     to_port         = 3306
@@ -95,7 +95,7 @@ resource "aws_security_group" "rds_sg" {
     security_groups = [aws_security_group.ec2_sg.id]
     description     = "Allow MySQL from EC2 instance"
   }
-  
+
   egress {
     from_port   = 0
     to_port     = 0
@@ -103,7 +103,7 @@ resource "aws_security_group" "rds_sg" {
     cidr_blocks = ["0.0.0.0/0"]
     description = "Allow all outbound traffic"
   }
-  
+
   tags = { Name = "woocommerce-rds-sg" }
 }
 
@@ -137,12 +137,12 @@ resource "aws_instance" "woocommerce" {
   vpc_security_group_ids      = [aws_security_group.ec2_sg.id]
   associate_public_ip_address = true
   key_name                    = "woocommerce-key"
-  
+
   root_block_device {
     volume_size = 30
     volume_type = "gp3"
   }
-  
+
   tags = { Name = "woocommerce-server" }
 }
 
@@ -150,26 +150,26 @@ resource "aws_instance" "woocommerce" {
 resource "aws_db_subnet_group" "main" {
   name       = "woocommerce-db-subnet-group"
   subnet_ids = [aws_subnet.public_a.id, aws_subnet.public_b.id]
-  
+
   tags = { Name = "woocommerce-db-subnet-group" }
 }
 
 # RDS MySQL Database
 resource "aws_db_instance" "woocommerce_db" {
-  identifier           = "woocommerce-db"
-  engine               = "mysql"
-  engine_version       = "8.0"
-  instance_class       = "db.t3.micro"
-  allocated_storage    = 20
-  storage_type         = "gp2"
-  db_name              = var.db_name
-  username             = var.db_username
-  password             = var.db_password
+  identifier             = "woocommerce-db"
+  engine                 = "mysql"
+  engine_version         = "8.0"
+  instance_class         = "db.t3.micro"
+  allocated_storage      = 20
+  storage_type           = "gp2"
+  db_name                = var.db_name
+  username               = var.db_username
+  password               = var.db_password
   vpc_security_group_ids = [aws_security_group.rds_sg.id]
-  db_subnet_group_name = aws_db_subnet_group.main.name
-  multi_az             = false
-  publicly_accessible  = false
-  skip_final_snapshot  = true
-  
+  db_subnet_group_name   = aws_db_subnet_group.main.name
+  multi_az               = false
+  publicly_accessible    = false
+  skip_final_snapshot    = true
+
   tags = { Name = "woocommerce-db" }
 }
