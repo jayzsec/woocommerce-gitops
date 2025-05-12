@@ -178,15 +178,14 @@ jobs:
         id: rds_host
         run: |
           RDS_HOST=$(echo "${{ needs.terraform.outputs.rds_endpoint }}" | cut -d':' -f1)
-          echo "RDS_HOST=${RDS_HOST}" >> $GITHUB_OUTPUT
-          
+          echo "RDS_HOST=${RDS_HOST}" >> $GITHUB_ENV
 
       - name: Run Ansible playbook
         env:
           DB_NAME: ${{ secrets.DB_NAME }}
           DB_USER: ${{ secrets.DB_USER }}
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
-          DB_HOST: ${{ steps.rds_host.outputs.RDS_HOST }}
+          DB_HOST: $RDS_HOST
         run: |
           WORKSPACE="${GITHUB_WORKSPACE}"
           
@@ -227,7 +226,7 @@ jobs:
             -e "db_name=${{ secrets.DB_NAME }}" \
             -e "db_user=${{ secrets.DB_USER }}" \
             -e "db_password=${{ secrets.DB_PASSWORD }}" \
-            -e "db_host=${{ steps.rds_host.outputs.RDS_HOST }}" \
+            -e "db_host=${DB_HOST}" \
             --private-key=${WORKSPACE}/woocommerce-key.pem
           
           # Run the wp-config verification playbook
@@ -252,7 +251,8 @@ jobs:
           echo "DB Test URL: http://${{ needs.terraform.outputs.ec2_public_ip }}/wordpress/db-test.php"
           echo "EC2 Instance IP: ${{ needs.terraform.outputs.ec2_public_ip }}"
           echo "RDS Endpoint: ${{ needs.terraform.outputs.rds_endpoint }}"
-          echo "RDS Host: ${{ steps.rds_host.outputs.RDS_HOST }}"
+          echo "using needs.terraform.outputs.rds_endpoint"
+          echo "RDS Host: ${{ needs.terraform.outputs.rds_endpoint }}"
           echo "------------------------------------------------------------"
           echo "Deployment completed successfully!"
           echo "WooCommerce deployment completed. Site available at: http://${{ needs.terraform.outputs.ec2_public_ip }}/wordpress"
