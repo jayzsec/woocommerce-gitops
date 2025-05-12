@@ -1,0 +1,39 @@
+# playbooks/update.yml
+---
+- name: Update WordPress and Plugins
+  hosts: aws_ec2
+  become: true
+  become_user: apache
+  tasks:
+    - name: Download WP-CLI
+      get_url:
+        url: https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar
+        dest: /usr/local/bin/wp
+        mode: '0755'
+      become: true
+      become_user: root
+
+    - name: Check WordPress version
+      command: wp core version
+      args:
+        chdir: /var/www/html/wordpress
+      register: wp_version
+      changed_when: false
+
+    - name: Update WordPress core
+      command: wp core update
+      args:
+        chdir: /var/www/html/wordpress
+      register: wp_update
+      changed_when: "'Success' in wp_update.stdout"
+
+    - name: Update WordPress database
+      command: wp core update-db
+      args:
+        chdir: /var/www/html/wordpress
+      when: wp_update.changed
+
+    - name: Update all plugins
+      command: wp plugin update --all
+      args:
+        chdir: /var/www/html/wordpress

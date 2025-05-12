@@ -1,0 +1,24 @@
+# playbooks/validate.yml
+---
+- name: Validate infrastructure before deployment
+  hosts: aws_ec2
+  tasks:
+    - name: Check if database is accessible
+      mysql_info:
+        login_host: "{{ db_host }}"
+        login_user: "{{ db_user }}"
+        login_password: "{{ db_password }}"
+      register: mysql_status
+      ignore_errors: true
+
+    - name: Check Apache installation
+      command: apachectl -v
+      register: apache_version
+      changed_when: false
+      ignore_errors: true
+
+    - name: Display validation results
+      debug:
+        msg: 
+          - "Database connection: {{ 'OK' if mysql_status is succeeded else 'FAILED' }}"
+          - "Apache version: {{ apache_version.stdout | default('Not installed') }}"
