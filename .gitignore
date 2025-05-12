@@ -44,3 +44,6 @@ todo.md
 
 # Ignore environment files
 ansible/woocommerce-deploy/.env
+
+# MacOS
+.DS_Store
