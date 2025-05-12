@@ -1,7 +1,7 @@
 ---
 - name: Troubleshoot and Fix WordPress Access
   hosts: ec2
-  become: true
+  become: yes
   tasks:
     - name: Check if WordPress directory exists
       stat:
