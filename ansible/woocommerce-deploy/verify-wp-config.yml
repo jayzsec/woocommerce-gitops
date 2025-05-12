@@ -1,0 +1,162 @@
+---
+- name: Verify and Fix wp-config.php Settings
+  hosts: ec2
+  become: yes
+  vars:
+    db_name: "{{ lookup('env', 'DB_NAME') }}"
+    db_user: "{{ lookup('env', 'DB_USER') }}"
+    db_password: "{{ lookup('env', 'DB_PASSWORD') }}"
+    db_host: "{{ lookup('env', 'DB_HOST') }}"
+  tasks:
+    - name: Print environment variables
+      debug:
+        msg: 
+          - "DB_NAME: {{ db_name }}"
+          - "DB_USER: {{ db_user }}"
+          - "DB_PASSWORD: [MASKED]"
+          - "DB_HOST: {{ db_host }}"
+          
+    - name: Verify wp-config.php exists
+      stat:
+        path: /var/www/html/wordpress/wp-config.php
+      register: wp_config_stat
+      
+    - name: Get current wp-config.php content
+      slurp:
+        src: /var/www/html/wordpress/wp-config.php
+      register: wp_config_content
+      when: wp_config_stat.stat.exists
+      
+    - name: Create or update wp-config.php with correct settings
+      copy:
+        dest: /var/www/html/wordpress/wp-config.php
+        content: |
+          <?php
+          // Basic DB settings
+          define('DB_NAME', '{{ db_name }}');
+          define('DB_USER', '{{ db_user }}');
+          define('DB_PASSWORD', '{{ db_password }}');
+          define('DB_HOST', '{{ db_host }}');
+          define('DB_CHARSET', 'utf8');
+          define('DB_COLLATE', '');
+
+          // Security keys
+          define('AUTH_KEY',         '{{ lookup('password', '/dev/null chars=ascii_letters length=64') }}');
+          define('SECURE_AUTH_KEY',  '{{ lookup('password', '/dev/null chars=ascii_letters length=64') }}');
+          define('LOGGED_IN_KEY',    '{{ lookup('password', '/dev/null chars=ascii_letters length=64') }}');
+          define('NONCE_KEY',        '{{ lookup('password', '/dev/null chars=ascii_letters length=64') }}');
+          define('AUTH_SALT',        '{{ lookup('password', '/dev/null chars=ascii_letters length=64') }}');
+          define('SECURE_AUTH_SALT', '{{ lookup('password', '/dev/null chars=ascii_letters length=64') }}');
+          define('LOGGED_IN_SALT',   '{{ lookup('password', '/dev/null chars=ascii_letters length=64') }}');
+          define('NONCE_SALT',       '{{ lookup('password', '/dev/null chars=ascii_letters length=64') }}');
+
+          // WordPress database table prefix
+          $table_prefix = 'wp_';
+
+          // For debugging database connection issues
+          define('WP_DEBUG', true);
+          define('WP_DEBUG_LOG', true);
+          define('WP_DEBUG_DISPLAY', false);
+
+          // Limit revisions
+          define('WP_POST_REVISIONS', 3);
+
+          // Disable file editing from admin
+          define('DISALLOW_FILE_EDIT', true);
+
+          // Auto-save interval
+          define('AUTOSAVE_INTERVAL', 160); // seconds
+
+          if (!defined('ABSPATH')) {
+              define('ABSPATH', __DIR__ . '/');
+          }
+
+          require_once ABSPATH . 'wp-settings.php';
+        owner: apache
+        group: apache
+        mode: '0640'
+        
+    - name: Create database connection diagnostic file
+      copy:
+        dest: /var/www/html/wordpress/db-test.php
+        content: |
+          <?php
+          // Database connection test file
+          echo "<h1>WordPress Database Connection Test</h1>";
+          
+          // Display database settings
+          echo "<h2>Database Settings</h2>";
+          echo "<ul>";
+          echo "<li>DB_NAME: {{ db_name }}</li>";
+          echo "<li>DB_USER: {{ db_user }}</li>";
+          echo "<li>DB_HOST: {{ db_host }}</li>";
+          echo "</ul>";
+          
+          // Test MySQL connection
+          echo "<h2>Connection Test</h2>";
+          try {
+              $conn = new mysqli('{{ db_host }}', '{{ db_user }}', '{{ db_password }}', '{{ db_name }}');
+              
+              if ($conn->connect_error) {
+                  echo "<p style='color: red'>Connection failed: " . $conn->connect_error . "</p>";
+              } else {
+                  echo "<p style='color: green'>Connection successful!</p>";
+                  $conn->close();
+              }
+          } catch (Exception $e) {
+              echo "<p style='color: red'>Exception: " . $e->getMessage() . "</p>";
+          }
+          
+          // Server environment
+          echo "<h2>Server Environment</h2>";
+          echo "<ul>";
+          echo "<li>Server IP: " . $_SERVER['SERVER_ADDR'] . "</li>";
+          echo "<li>PHP Version: " . phpversion() . "</li>";
+          echo "</ul>";
+          
+          // Run network tests
+          echo "<h2>Network Tests</h2>";
+          echo "<pre>";
+          system("ping -c 3 {{ db_host }} 2>&1");
+          echo "</pre>";
+          
+          // MySQL client check
+          echo "<h2>MySQL Client Check</h2>";
+          echo "<pre>";
+          system("which mysql 2>&1");
+          system("mysql --version 2>&1");
+          echo "</pre>";
+        owner: apache
+        group: apache
+        mode: '0644'
+        
+    - name: Check MySQL client exists
+      command: which mysql
+      register: mysql_client
+      ignore_errors: yes
+      changed_when: false
+      
+    - name: Install MySQL client if missing
+      dnf:
+        name: 
+          - mariadb105
+          - mariadb105-devel
+        state: present
+      when: mysql_client.rc != 0
+      
+    - name: Test database connection from command line
+      shell: |
+        mysql -h "{{ db_host }}" -u "{{ db_user }}" -p"{{ db_password }}" -e "SHOW DATABASES;"
+      register: db_test
+      ignore_errors: yes
+      changed_when: false
+      no_log: true # To avoid password leakage
+      
+    - name: Display database test result
+      debug:
+        msg: "Database connection result: {{ 'Success' if db_test.rc == 0 else 'Failed: ' + db_test.stderr }}"
+
+    - name: Restart Apache
+      service:
+        name: httpd
+        state: restarted

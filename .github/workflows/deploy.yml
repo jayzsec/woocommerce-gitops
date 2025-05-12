@@ -202,15 +202,21 @@ jobs:
           
           # Decide which playbook to use - use either the dedicated playbook or the one in playbooks directory
           if [ -s ansible/woocommerce-deploy/woocommerce-playbook.yml ]; then
-            PLAYBOOK="ansible/woocommerce-deploy/woocommerce-playbook.yml"
+          PLAYBOOK="ansible/woocommerce-deploy/woocommerce-playbook.yml"
           elif [ -s ansible/playbooks/deploy.yml ]; then
-            PLAYBOOK="ansible/playbooks/deploy.yml"
-            # Ensure the inventory is properly set
-            cp ansible/woocommerce-deploy/inventory.ini ansible/inventory/
+          PLAYBOOK="ansible/playbooks/deploy.yml"
+          # Ensure the inventory is properly set
+          cp ansible/woocommerce-deploy/inventory.ini ansible/inventory/
           else
-            echo "No valid playbook found! Exiting."
-            exit 1
+          echo "No valid playbook found! Exiting."
+          exit 1
           fi
+          
+          # Export variables that need to be passed to Ansible
+          export DB_NAME="${DB_NAME}"
+          export DB_USER="${DB_USER}"
+          export DB_PASSWORD="${DB_PASSWORD}"
+          export DB_HOST="${DB_HOST}"
           
           ansible-playbook -i ansible/woocommerce-deploy/inventory.ini ${PLAYBOOK} \
             -e "db_name=${{ secrets.DB_NAME }}" \
@@ -218,6 +224,10 @@ jobs:
             -e "db_password=${{ secrets.DB_PASSWORD }}" \
             -e "db_host=${{ steps.rds_host.outputs.RDS_HOST }}" \
             --private-key=${WORKSPACE}/woocommerce-key.pem
+          
+          # Run the wp-config verification playbook
+          ansible-playbook -i ansible/woocommerce-deploy/inventory.ini ansible/woocommerce-deploy/verify-wp-config.yml \
+          --private-key=${WORKSPACE}/woocommerce-key.pem
           
           # Check if wordpress-fix.yml exists in woocommerce-deploy directory first
           if [ -s ansible/woocommerce-deploy/wordpress-fix.yml ]; then
@@ -228,5 +238,16 @@ jobs:
             echo "No valid playbook found! Exiting."
             exit 1
           fi
-          
+
+          # Print deployment info
+          echo "------------------------------------------------------------"
+          echo "DEPLOYMENT INFORMATION:"
+          echo "------------------------------------------------------------"
+          echo "WordPress URL: http://${{ needs.terraform.outputs.ec2_public_ip }}/wordpress"
+          echo "DB Test URL: http://${{ needs.terraform.outputs.ec2_public_ip }}/wordpress/db-test.php"
+          echo "EC2 Instance IP: ${{ needs.terraform.outputs.ec2_public_ip }}"
+          echo "RDS Endpoint: ${{ needs.terraform.outputs.rds_endpoint }}"
+          echo "RDS Host: ${{ steps.rds_host.outputs.RDS_HOST }}"
+          echo "------------------------------------------------------------"
+          echo "Deployment completed successfully!"
           echo "WooCommerce deployment completed. Site available at: http://${{ needs.terraform.outputs.ec2_public_ip }}/wordpress"
