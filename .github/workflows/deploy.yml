@@ -217,7 +217,7 @@ jobs:
         if curl -s --head "http://${{ env.EC2_PUBLIC_IP }}/wordpress" | grep "200 OK" > /dev/null; then
           echo "WordPress is accessible!"
         else
-          echo "WordPress is not accessible!"
+          echo "WordPress is not accessible! exting..."
           exit 1
         fi
 
