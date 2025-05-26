@@ -1,4 +1,3 @@
-# Copied from ansible/woocommerce-deploy/woocommerce-playbook.yml
 ---
 - name: Install and configure WooCommerce
   hosts: ec2
@@ -8,6 +7,8 @@
     db_user: "{{ lookup('env', 'DB_USER') }}"
     db_password: "{{ lookup('env', 'DB_PASSWORD') }}"
     db_host: "{{ lookup('env', 'DB_HOST') }}"
+    wordpress_version: "6.4.3"
+    woocommerce_version: "8.6.1"
   tasks:
     - name: Update package cache
       dnf:
@@ -33,6 +34,7 @@
           - mariadb105
           - unzip
           - wget
+          - policycoreutils-python-utils
           
     - name: Start and enable Apache
       service:
@@ -48,7 +50,7 @@
         
     - name: Download WordPress
       get_url:
-        url: https://wordpress.org/latest.tar.gz
+        url: "https://wordpress.org/wordpress-{{ wordpress_version }}.tar.gz"
         dest: /tmp/wordpress.tar.gz
         
     - name: Create WordPress directory
@@ -74,8 +76,8 @@
         
     - name: Install WooCommerce plugin
       shell: |
-        wget https://downloads.wordpress.org/plugin/woocommerce.latest-stable.zip -P /tmp
-        unzip /tmp/woocommerce.latest-stable.zip -d /var/www/html/wordpress/wp-content/plugins
+        wget "https://downloads.wordpress.org/plugin/woocommerce.{{ woocommerce_version }}.zip" -P /tmp
+        unzip /tmp/woocommerce.{{ woocommerce_version }}.zip -d /var/www/html/wordpress/wp-content/plugins
       args:
         creates: /var/www/html/wordpress/wp-content/plugins/woocommerce
         
@@ -87,11 +89,10 @@
         recurse: yes
         mode: 'u=rwX,g=rX,o=rX'
         
-    - name: Configure SELinux for WordPress (if enabled)
+    - name: Apply SELinux context to WordPress directory
       shell: |
         semanage fcontext -a -t httpd_sys_rw_content_t "/var/www/html/wordpress(/.*)?"
         restorecon -Rv /var/www/html/wordpress
-      ignore_errors: true
       
   handlers:
     - name: Restart Apache
