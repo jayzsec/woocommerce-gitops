@@ -36,15 +36,19 @@ The project is organized as follows:
 
 - **`ansible/`**: Contains Ansible configurations for application deployment
   - **`playbooks/`**: Organized Ansible playbooks
-    - `deploy.yml`: Main playbook for WordPress and WooCommerce deployment
-    - `backup.yml`: Backup procedures for WordPress files and database
-    - `update.yml`: Update procedures for WordPress core and plugins
-    - `validate.yml`: Pre-deployment validation checks
+    - `deploy.yml`: Main playbook for WordPress and WooCommerce deployment. Pins WordPress and WooCommerce versions for predictable deployments and includes improved SELinux handling.
+    - `verify-wp-config.yml`: Verifies `wp-config.php` settings.
+    - `wordpress-fix.yml`: Applies various fixes for common WordPress issues.
+    - `backup.yml`: Backup procedures for WordPress files and database.
+    - `update.yml`: Update procedures for WordPress core and plugins.
+    - `validate.yml`: Pre-deployment validation checks.
   - **`templates/`**: Jinja2 templates for configuration files
     - `wordpress.conf.j2`: Apache virtual host configuration
     - `wp-config.php.j2`: WordPress configuration template
-  - **`deploy-woocommerce.sh`**: User-friendly deployment script
-  - **`fix-wordpress.sh`**: Troubleshooting script for common issues
+  - **`inventory/`**: Ansible inventory configurations
+    - `aws_ec2.yml`: Dynamic inventory script for AWS EC2.
+  - **`deploy-woocommerce.sh`**: User-friendly helper script that runs `playbooks/deploy.yml` using the dynamic inventory. Prompts for necessary database credentials.
+  - **`fix-wordpress.sh`**: Troubleshooting helper script that runs `playbooks/wordpress-fix.yml` using the dynamic inventory.
 
 ## Setup
 
@@ -73,18 +77,33 @@ The project is organized as follows:
    ```
 
 3. **Create an EC2 key pair in AWS and download the `.pem` file**
-   - Ensure you name it `woocommerce-key` to match the configuration
-   - Store the private key securely and remember its location
+   - Store the private key securely (e.g., `~/.ssh/your-key-name.pem`).
+   - Ensure this key name matches the `ec2_key_name` variable in `terraform/variables.tf`.
 
-4. **Configure GitHub repository secrets**
-   Add the following secrets to your GitHub repository:
-   - `AWS_ACCESS_KEY_ID`: Your AWS access key
-   - `AWS_SECRET_ACCESS_KEY`: Your AWS secret access key
-   - `SSH_PRIVATE_KEY`: Contents of your EC2 private key file (.pem)
-   - `DB_NAME`: Database name for WordPress
-   - `DB_USER`: Database username for WordPress
-   - `DB_PASSWORD`: Secure password for WordPress database
-   - `DB_HOST`: Will be automatically set by Terraform, but can be overridden
+4. **Review and Update Terraform Variables (`terraform/variables.tf`)**
+   Before deploying, review and customize the following variables in `terraform/variables.tf`:
+   - `aws_region`: The AWS region for deployment.
+   - `instance_type`: EC2 instance type (default: `t2.micro`).
+   - `ec2_key_name`: **Important:** Set this to the name of the EC2 key pair you created (e.g., "woocommerce-key").
+   - `ssh_access_cidr`: **Security Critical:** List of CIDR blocks allowed for SSH access to the EC2 instance. Defaults to `["0.0.0.0/0"]` (open to all). **It is strongly recommended to restrict this to your IP address or specific bastion host IPs.**
+   - `db_name`, `db_username`, `db_password`: Credentials for the RDS database.
+   - `rds_multi_az`: Set to `true` for production for higher availability (default: `false`).
+   - `rds_skip_final_snapshot`: Set to `false` for production to ensure a final snapshot is taken on deletion (default: `false`).
+
+5. **Configure GitHub repository secrets for the CI/CD Workflow**
+   Add the following secrets to your GitHub repository settings (used by `.github/workflows/deploy.yml`):
+   - `AWS_ACCESS_KEY_ID`: Your AWS access key.
+   - `AWS_SECRET_ACCESS_KEY`: Your AWS secret access key.
+   - `SSH_PRIVATE_KEY`: Contents of your EC2 private key file (`.pem`) that matches `var.ec2_key_name`.
+   - `TF_VAR_db_name`: Database name for WordPress (e.g., `wordpress_db`). This will be passed to Terraform.
+   - `TF_VAR_db_username`: Database username (e.g., `wp_user`). This will be passed to Terraform.
+   - `TF_VAR_db_password`: Secure password for the database. This will be passed to Terraform.
+   - `DB_NAME_ENV`: Database name for WordPress (e.g., `wordpress_db`). Used by Ansible.
+   - `DB_USER_ENV`: Database username (e.g., `wp_user`). Used by Ansible.
+   - `DB_PASSWORD_ENV`: Secure password for the database. Used by Ansible.
+   - `DB_HOST_ENV`: Database host. This will be populated by the Terraform output in the GitHub Actions workflow and passed to Ansible.
+
+   *Note on Database Credentials:* The GitHub Actions workflow in `.github/workflows/deploy.yml` handles the flow of database credentials. Terraform creates the RDS instance and outputs its endpoint (`DB_HOST`). These, along with the DB name, user, and password (defined as secrets), are then passed as environment variables to the Ansible playbook. For manual deployments using `ansible/deploy-woocommerce.sh`, you will be prompted for these values.
 
 ### Deployment
 
@@ -116,14 +135,18 @@ The project is organized as follows:
    terraform init
    terraform apply
    ```
+   Note the outputs from `terraform apply`, such as the RDS endpoint. While the `deploy-woocommerce.sh` script will prompt for the database host, understanding the Terraform outputs is useful.
 
 2. **Run the Ansible deployment script**
    ```bash
    cd ../ansible
    ./deploy-woocommerce.sh
    ```
+   This script uses `ansible/playbooks/deploy.yml` and the dynamic inventory at `ansible/inventory/aws_ec2.yml`.
+   - The script will prompt you for database credentials: `DB_NAME`, `DB_USER`, `DB_PASSWORD`, and `DB_HOST` (the RDS endpoint from Terraform output).
+   - **Important**: Ensure your target EC2 instance is tagged with `Name: woocommerce-server` for the dynamic inventory to detect it.
 
-3. **Follow the script prompts to complete deployment**
+3. **Follow the script prompts to complete deployment.**
 
 ## Troubleshooting
 
@@ -134,12 +157,8 @@ If you encounter issues with WordPress access:
    cd ansible
    ./fix-wordpress.sh
    ```
-
-2. **Common issues addressed by the fix script**:
-   - WordPress extracted to wrong directory
-   - Apache configuration issues
-   - SELinux permissions
-   - .htaccess configuration
+   This script uses `ansible/playbooks/wordpress-fix.yml` and the dynamic inventory at `ansible/inventory/aws_ec2.yml`.
+   - **Important**: Ensure your target EC2 instance is tagged with `Name: woocommerce-server` for the dynamic inventory to detect it.
 
 ## Maintenance
 
@@ -172,10 +191,10 @@ This setup includes several security measures:
 - Secure WordPress configuration
 - AWS security groups for network isolation
 - Database password stored as sensitive values
-- SSH access with key-based authentication
+- SSH access with key-based authentication, configurable via the `ssh_access_cidr` Terraform variable to restrict source IPs.
 
 **Production Recommendations:**
-- Restrict SSH access to specific IP addresses
+- **Restrict SSH access:** Utilize the `ssh_access_cidr` variable in `terraform/variables.tf` to limit SSH access to known IPs.
 - Implement HTTPS with SSL/TLS certificates
 - Set up AWS Web Application Firewall (WAF)
 - Enable database encryption at rest

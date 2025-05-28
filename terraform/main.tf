@@ -68,7 +68,7 @@ resource "aws_security_group" "ec2_sg" {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"] # Restrict to your IP in production
+    cidr_blocks = var.ssh_access_cidr
     description = "Allow SSH"
   }
 
@@ -136,7 +136,7 @@ resource "aws_instance" "woocommerce" {
   subnet_id                   = aws_subnet.public_a.id
   vpc_security_group_ids      = [aws_security_group.ec2_sg.id]
   associate_public_ip_address = true
-  key_name                    = "woocommerce-key"
+  key_name                    = var.ec2_key_name
 
   root_block_device {
     volume_size = 30
@@ -167,9 +167,9 @@ resource "aws_db_instance" "woocommerce_db" {
   password               = var.db_password
   vpc_security_group_ids = [aws_security_group.rds_sg.id]
   db_subnet_group_name   = aws_db_subnet_group.main.name
-  multi_az               = false
+  multi_az               = var.rds_multi_az
   publicly_accessible    = false
-  skip_final_snapshot    = true
+  skip_final_snapshot    = var.rds_skip_final_snapshot
 
   tags = { Name = "woocommerce-db" }
 }
