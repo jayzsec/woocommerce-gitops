@@ -176,9 +176,43 @@ This setup includes several security measures:
 
 **Production Recommendations:**
 - Restrict SSH access to specific IP addresses
-- Implement HTTPS with SSL/TLS certificates
+- Implement HTTPS with SSL/TLS certificates (now partially automated, see below)
 - Set up AWS Web Application Firewall (WAF)
 - Enable database encryption at rest
+
+### SSL Certificate Management (Let's Encrypt)
+
+This project now includes automated SSL certificate management using **Certbot** and **Let's Encrypt**.
+- **How it works:** The Ansible playbook (`ansible/woocommerce-deploy/woocommerce-playbook.yml`) includes tasks to install Certbot, obtain an SSL certificate for the configured domain, and set up Apache to use HTTPS.
+- **Automated Renewal:** A cron job is automatically configured to attempt renewal of the certificate periodically, ensuring your site remains secured with a valid SSL certificate.
+- **Required Configuration:** To enable SSL, you must set the following environment variables before running the Ansible playbook (e.g., as GitHub secrets if using the Actions workflow, or directly if running manually):
+    - `DOMAIN_NAME`: Your fully qualified domain name (e.g., `store.example.com`). This domain must resolve to the EC2 instance's public IP address.
+    - `CERTBOT_EMAIL`: Your email address, used by Let's Encrypt for registration and important notifications.
+
+## Monitoring and Logging
+
+To enhance observability and troubleshooting, the following features have been implemented:
+
+- **Centralized Logging:**
+    - Apache access and error logs, as well as WordPress debug logs (if `WP_DEBUG` is enabled), are configured to be forwarded to a remote syslog server.
+    - This is managed by `rsyslog` on the EC2 instance.
+    - **Required Configuration:** You need to set the `REMOTE_SYSLOG_SERVER` environment variable to the address of your syslog server (e.g., `logs.yourdomain.com`). The Ansible playbook (`ansible/woocommerce-deploy/woocommerce-playbook.yml`) uses this variable to configure `rsyslog`.
+    - WordPress debug logging is now configured in `wp-config.php` to write to `/var/log/wordpress/debug.log`, which is then picked up by `rsyslog`.
+
+- **Health Check Endpoint:**
+    - A basic health check endpoint is available at `/wordpress/health-check.php`.
+    - This script checks the WordPress database connection.
+    - **Success:** Returns HTTP 200 with the message "WordPress OK".
+    - **Failure:** Returns HTTP 503 with "WordPress DB connection error".
+    - This can be used by monitoring services to quickly assess the basic health of the WordPress application.
+
+## Automated Testing
+
+The Ansible playbook for WooCommerce deployment can be tested locally using a Docker-based environment. This helps ensure the playbook's reliability and catch issues early.
+
+- **Location:** Test scripts and Dockerfile are located in the `tests/playbook_test/` directory.
+- **Functionality:** The test environment builds a Docker image based on `rockylinux:8`, installs Ansible and necessary services (Apache, MariaDB, PHP), and then runs the `woocommerce-playbook.yml` against a local MariaDB instance within the container. It verifies that the playbook completes successfully, Apache is running, and the WordPress health check endpoint is operational.
+- **Instructions:** For detailed instructions on how to build the Docker image and run the tests, please refer to the `README.md` file within the test directory: [`tests/playbook_test/README.md`](tests/playbook_test/README.md).
 
 ## Future Improvements
 

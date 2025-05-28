@@ -7,6 +7,9 @@
     db_user: "{{ lookup('env', 'DB_USER') }}"
     db_password: "{{ lookup('env', 'DB_PASSWORD') }}"
     db_host: "{{ lookup('env', 'DB_HOST') }}"
+    domain_name: "{{ lookup('env', 'DOMAIN_NAME') }}"  # Example: yourdomain.com
+    certbot_email: "{{ lookup('env', 'CERTBOT_EMAIL') }}" # Example: youremail@example.com
+    remote_syslog_server: "{{ lookup('env', 'REMOTE_SYSLOG_SERVER', default='logs.example.com') }}" # Placeholder
   tasks:
     - name: Update package cache
       dnf:
@@ -32,6 +35,9 @@
           - mariadb105
           - unzip
           - wget
+          - certbot
+          - python3-certbot-apache
+          - rsyslog # Ensure rsyslog is installed
           
     - name: Start and enable Apache
       service:
@@ -91,9 +97,86 @@
         semanage fcontext -a -t httpd_sys_rw_content_t "/var/www/html/wordpress(/.*)?"
         restorecon -Rv /var/www/html/wordpress
       ignore_errors: yes
+
+    - name: Obtain SSL certificate using Certbot
+      command: >
+        certbot --apache -d {{ domain_name }} --non-interactive --agree-tos -m {{ certbot_email }} --redirect
+      args:
+        creates: /etc/letsencrypt/live/{{ domain_name }}/fullchain.pem
+      notify: Restart Apache
+
+    - name: Ensure Certbot auto-renewal is scheduled
+      cron:
+        name: "Certbot auto-renewal"
+        job: "certbot renew --quiet"
+        minute: "0"
+        hour: "2" # Run daily at 2 AM
+
+    - name: Create WordPress log directory
+      file:
+        path: /var/log/wordpress
+        state: directory
+        owner: apache # Or the user PHP runs as
+        group: apache # Or the group PHP runs as
+        mode: '0775'
+
+    - name: Configure rsyslog for WordPress and Apache
+      copy:
+        dest: /etc/rsyslog.d/90-wordpress.conf
+        content: |
+          # Forward Apache access logs
+          module(load="imfile")
+          input(type="imfile"
+                File="/var/log/httpd/wordpress_access.log"
+                Tag="apache-access"
+                Severity="info"
+                Facility="local3")
+          local3.* @{{ remote_syslog_server }}
+
+          # Forward Apache error logs
+          input(type="imfile"
+                File="/var/log/httpd/wordpress_error.log"
+                Tag="apache-error"
+                Severity="error"
+                Facility="local4")
+          local4.* @{{ remote_syslog_server }}
+
+          # Forward WordPress debug logs
+          input(type="imfile"
+                File="/var/log/wordpress/debug.log"
+                Tag="wordpress-debug"
+                Severity="info" # Adjust severity as needed
+                Facility="local5")
+          local5.* @{{ remote_syslog_server }}
+      notify: Restart rsyslog
+
+    - name: Create health check script
+      copy:
+        dest: /var/www/html/wordpress/health-check.php
+        content: |
+          <?php
+          require_once 'wp-load.php';
+          global $wpdb;
+          if ($wpdb->check_connection()) {
+              header('HTTP/1.1 200 OK');
+              echo 'WordPress OK';
+              exit;
+          } else {
+              header('HTTP/1.1 503 Service Unavailable');
+              echo 'WordPress DB connection error';
+              exit;
+          }
+          ?>
+        owner: apache
+        group: apache
+        mode: '0644'
       
   handlers:
     - name: Restart Apache
       service:
         name: httpd
+        state: restarted
+    - name: Restart rsyslog
+      service:
+        name: rsyslog
         state: restarted

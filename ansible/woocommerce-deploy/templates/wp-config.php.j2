@@ -21,7 +21,10 @@ define('NONCE_SALT',       '{{ lookup('password', '/dev/null chars=ascii_letters
 $table_prefix = 'wp_';
 
 // For developers: WordPress debugging mode
-define('WP_DEBUG', false);
+define('WP_DEBUG', true); // Enable debugging
+define('WP_DEBUG_LOG', '/var/log/wordpress/debug.log'); // Log to a specific file
+define('WP_DEBUG_DISPLAY', false); // Do not display debug messages in HTML
+@ini_set('display_errors', 0); // Ensure errors are not displayed
 
 // Limit revisions
 define('WP_POST_REVISIONS', 3);
